@@ -7,6 +7,10 @@
 
 using namespace std;
 
+#ifndef M_PI 
+#define M_PI 3.14159265358979323846 
+#endif
+
 int W = 0;
 int H = 0;
 
@@ -14,32 +18,44 @@ struct Boid {
     float x, y; // позиция
     float vx, vy; // скорость
     float size; // размер
+    float warning_distance; // дистанция предупреждения
+    float ax, ay; // ускорение
 
-    Boid(float x_, float y_, float size_) : x(x_), y(y_), size(size_) {
-        vx = static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f;
-        vy = static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f;
+    Boid(float x_, float y_, float size_, float warning_distance_) : x(x_), y(y_), size(size_), warning_distance(warning_distance_) {
+        float angle = static_cast<float>(rand()) / RAND_MAX * 2.0f * M_PI;
+        vx = cos(angle) * 0.01f;
+        vy = sin(angle) * 0.01f;
+        ax = 0.0f;
+        ay = 0.0f;
     }
 
     void update() {
-        x += vx * 0.01f;
-        y += vy * 0.01f;
+        vx += ax;
+        vy += ay;
 
-        // избегаем столкновения с краями экрана и разворачиваемся
-        if (x > 1.0f) {
-            x = 1.0f;
-            vx = -vx;
+        // нормируем скорость
+        float speed = sqrt(vx * vx + vy * vy);
+        vx = (vx / speed) * 0.01f;
+        vy = (vy / speed) * 0.01f;
+
+        x += vx;
+        y += vy;
+
+        // избегаем столкновения с краями экрана и разворачиваемся до столкновения
+        if (x > 1.0f - warning_distance) {
+            ax = -0.005f; // замедляем и изменяем направление
+        } else if (x < -1.0f + warning_distance) {
+            ax = 0.005f; // замедляем и изменяем направление
+        } else {
+            ax = 0.0f; // сбрасываем ускорение если не вблизи границы
         }
-        if (x < -1.0f) {
-            x = -1.0f;
-            vx = -vx;
-        }
-        if (y > 1.0f) {
-            y = 1.0f;
-            vy = -vy;
-        }
-        if (y < -1.0f) {
-            y = -1.0f;
-            vy = -vy;
+		
+        if (y > 1.0f - warning_distance) {
+            ay = -0.005f; // замедляем и изменяем направление
+        } else if (y < -1.0f + warning_distance) {
+            ay = 0.005f; // замедляем и изменяем направление
+        } else {
+            ay = 0.0f; // сбрасываем ускорение если не вблизи границы
         }
     }
 
@@ -65,7 +81,8 @@ public:
             boids.emplace_back(
                 static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f,
                 static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f,
-                0.05f // размер "птичек"
+                0.05f, // размер "птичек"
+                0.1f // дистанция предупреждения
             );
         }
     }
