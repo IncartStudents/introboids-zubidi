@@ -1,6 +1,6 @@
-﻿cmake_minimum_required (VERSION 3.8)
+﻿cmake_minimum_required (VERSION 3.10)
 
-add_executable (boids-imgui "main.cpp" "UseImGui.cpp" "UseImGui.h")
+add_executable (boids-imgui "main.cpp" "UseImGui.cpp" "UseImGui.h" "Boid.h" "Boid.cpp") 
 
 find_package(glad CONFIG REQUIRED)
 target_link_libraries(boids-imgui PRIVATE glad::glad)
