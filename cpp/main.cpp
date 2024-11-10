@@ -7,8 +7,8 @@
 
 using namespace std;
 
-#ifndef M_PI 
-#define M_PI 3.14159265358979323846 
+#ifndef PI 
+#define PI 3.14159265358979323846 
 #endif
 
 int W = 0;
@@ -17,58 +17,136 @@ int H = 0;
 struct Boid {
     float x, y; // позиция
     float vx, vy; // скорость
-    float size; // размер
-    float warning_distance; // дистанция предупреждения
     float ax, ay; // ускорение
+    float size; // размер боид
+    float visualRange = 0.2f; // диапазон видимости других боид
+    float minDistance = 0.05f; // минимальное расстояние до других боид
 
-    Boid(float x_, float y_, float size_, float warning_distance_) : x(x_), y(y_), size(size_), warning_distance(warning_distance_) {
-        float angle = static_cast<float>(rand()) / RAND_MAX * 2.0f * M_PI;
+    Boid(float x_, float y_, float size_) : x(x_), y(y_), size(size_) {
+        float angle = static_cast<float>(rand()) / RAND_MAX * 2.0f * PI;
         vx = cos(angle) * 0.01f;
         vy = sin(angle) * 0.01f;
         ax = 0.0f;
         ay = 0.0f;
     }
 
-    void update() {
-        vx += ax;
-        vy += ay;
+    // Полет к центру 
+    void Cohesion(const vector<Boid>& boids) {
+        float centerX = 0.0f, centerY = 0.0f;
+        int numNeighbors = 0;
+        float centeringFactor = 0.002f;
 
-        // нормируем скорость
-        float speed = sqrt(vx * vx + vy * vy);
-        vx = (vx / speed) * 0.01f;
-        vy = (vy / speed) * 0.01f;
-
-        x += vx;
-        y += vy;
-
-        // избегаем столкновения с краями экрана и разворачиваемся до столкновения
-        if (x > 1.0f - warning_distance) {
-            ax = -0.005f; // замедляем и изменяем направление
-        } else if (x < -1.0f + warning_distance) {
-            ax = 0.005f; // замедляем и изменяем направление
-        } else {
-            ax = 0.0f; // сбрасываем ускорение если не вблизи границы
+        for (const auto& other : boids) {
+            if (&other != this && distanceTo(other) < visualRange) {
+                centerX += other.x;
+                centerY += other.y;
+                numNeighbors++;
+            }
         }
-		
-        if (y > 1.0f - warning_distance) {
-            ay = -0.005f; // замедляем и изменяем направление
-        } else if (y < -1.0f + warning_distance) {
-            ay = 0.005f; // замедляем и изменяем направление
-        } else {
-            ay = 0.0f; // сбрасываем ускорение если не вблизи границы
+
+        if (numNeighbors > 0) {
+            centerX /= numNeighbors;
+            centerY /= numNeighbors;
+            ax += (centerX - x) * centeringFactor;
+            ay += (centerY - y) * centeringFactor;
         }
     }
 
+    // Избегание столкновений 
+    void Separation(const vector<Boid>& boids) {
+        float moveX = 0.0f, moveY = 0.0f;
+        float avoidFactor = 0.05f;
+
+        for (const auto& other : boids) {
+            if (&other != this && distanceTo(other) < minDistance) {
+                moveX += x - other.x;
+                moveY += y - other.y;
+            }
+        }
+
+        ax += moveX * avoidFactor;
+        ay += moveY * avoidFactor;
+    }
+
+    // Выравнивание скорости 
+    void Alignment(const vector<Boid>& boids) {
+        float avgVX = 0.0f, avgVY = 0.0f;
+        int numNeighbors = 0;
+        float matchingFactor = 0.005f;
+
+        for (const auto& other : boids) {
+            if (&other != this && distanceTo(other) < visualRange) {
+                avgVX += other.vx;
+                avgVY += other.vy;
+                numNeighbors++;
+            }
+        }
+
+        if (numNeighbors > 0) {
+            avgVX /= numNeighbors;
+            avgVY /= numNeighbors;
+            ax += (avgVX - vx) * matchingFactor;
+            ay += (avgVY - vy) * matchingFactor;
+        }
+    }
+
+    // Разворот перед границами экрана
+    void keepWithinBounds() {
+        float margin = 0.1f;
+        float turnFactor = 0.01f;
+
+        if (x < -1.0f + margin) ax += turnFactor;
+        if (x > 1.0f - margin) ax -= turnFactor;
+        if (y < -1.0f + margin) ay += turnFactor;
+        if (y > 1.0f - margin) ay -= turnFactor;
+    }
+
+    // Ограничение максимальной скорости
+    void limitSpeed() {
+        float speedLimit = 0.05f;
+        float speed = sqrt(vx * vx + vy * vy);
+
+        if (speed > speedLimit) {
+            vx = (vx / speed) * speedLimit;
+            vy = (vy / speed) * speedLimit;
+        }
+    }
+
+    // Обновление положения боид
+    void update(const vector<Boid>& boids) {
+        Cohesion(boids);
+        Separation(boids);
+        Alignment(boids);
+        keepWithinBounds();
+        limitSpeed();
+
+        // Обновляем скорость и позицию
+        vx += ax;
+        vy += ay;
+        x += vx;
+        y += vy;
+
+        // Сбрасываем ускорение
+        ax = 0.0f;
+        ay = 0.0f;
+    }
+
+    // Отрисовка боид
     void draw() const {
         float angle = atan2(vy, vx);
         float cosA = cos(angle);
         float sinA = sin(angle);
 
         glBegin(GL_TRIANGLES);
-        glVertex2f(x + cosA * size, y + sinA * size); // вершина треугольника
-        glVertex2f(x + cosA * (-size/2) - sinA * (size/2), y + sinA * (-size/2) + cosA * (size/2));
-        glVertex2f(x + cosA * (-size/2) + sinA * (size/2), y + sinA * (-size/2) - cosA * (size/2));
+        glVertex2f(x + cosA * size, y + sinA * size);
+        glVertex2f(x + cosA * (-size / 2) - sinA * (size / 2), y + sinA * (-size / 2) + cosA * (size / 2));
+        glVertex2f(x + cosA * (-size / 2) + sinA * (size / 2), y + sinA * (-size / 2) - cosA * (size / 2));
         glEnd();
+    }
+
+    // Вычисление расстояния между боид
+    float distanceTo(const Boid& other) const {
+        return sqrt((x - other.x) * (x - other.x) + (y - other.y) * (y - other.y));
     }
 };
 
@@ -77,49 +155,38 @@ public:
     vector<Boid> boids;
 
     CustomImGui() {
-        for (int i = 0; i < 30; ++i) { // Создаем 30 "птичек"
+        for (int i = 0; i < 50; ++i) {
             boids.emplace_back(
                 static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f,
                 static_cast<float>(rand()) / RAND_MAX * 2.0f - 1.0f,
-                0.05f, // размер "птичек"
-                0.1f // дистанция предупреждения
+                0.05f
             );
         }
     }
 
     virtual void Update() override {
         for (auto& boid : boids) {
-            boid.update();
+            boid.update(boids);
             boid.draw();
         }
     }
 };
 
+
 int main() {
-    // Setup window
-    if (!glfwInit())
-        return 1;
+    if (!glfwInit()) return 1;
 
     const char *glsl_version = "#version 130";
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 0);
 
     GLFWwindow *window = glfwCreateWindow(1280, 720, "Boid Simulation", NULL, NULL);
-    if (window == NULL)
-        return 1;
+    if (window == NULL) return 1;
     glfwMakeContextCurrent(window);
-    glfwSwapInterval(1); // Enable vsync
+    glfwSwapInterval(1);
 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
         throw("Unable to context to OpenGL");
-
-    int screen_width, screen_height;
-    glfwGetFramebufferSize(window, &screen_width, &screen_height);
-    glViewport(0, 0, screen_width, screen_height);
-
-    auto* mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
-    W = mode->width;
-    H = mode->height;
 
     CustomImGui myimgui;
     myimgui.Init(window, glsl_version);
